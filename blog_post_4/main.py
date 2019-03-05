@@ -84,8 +84,8 @@ def train_test(X, Y, P):
     X_test = X[n//2:]
     Y_train = Y[:n//2]
     Y_test = Y[n//2:]
-    P_train = Y[n//2:]
-    P_test = Y[:n//2]
+    P_train = P[n//2:]
+    P_test = P[:n//2]
     return X_train, X_test, Y_train, Y_test, P_train, P_test
 
 def estimate(X_train, Y_train, X_test):
@@ -107,11 +107,28 @@ def rank_eval(p, X_test, Y_test, P_test):
     frac_green = np.sum(X_rank[:, 1]) / n_select
     return acc, frac_green
 
+def sample_eval(p, X_test, Y_test, P_test):
+    selected = []
+    cumulative = np.cumsum(p)
+    norm = cumulative / np.amax(cumulative)
+    for i in range(n_select):
+        while True:
+            draw = np.random.rand()
+            idx = np.searchsorted(norm, draw)
+            if idx not in selected:
+                selected.append(idx)
+                break
+    Y_selected = Y_test[selected]
+    X_selected = X_test[selected]
+    acc = np.sum(Y_selected) / n_select
+    frac_green = np.sum(X_selected[:, 1]) / n_select
+    return acc, frac_green
+
 def baserate_selection_plot():
-    baserates = np.linspace(0, 1, 20)
+    baserates = np.linspace(0, 2, 20)
     out = [baserate_rank(b) for b in baserates]
-    acc_vector, bias_vector, tot_vec = zip(*out)
-    return baserates, acc_vector, bias_vector, tot_vec
+    acc_vector, bias_vector, sacc_vector, sbias_vector, tot_vec = zip(*out)
+    return baserates, acc_vector, bias_vector, sacc_vector, sbias_vector, tot_vec
 
 def baserate_rank(b):
     Xl = generate_data(n, delta_loc_green=b)
@@ -132,15 +149,26 @@ def baserate_rank(b):
     X, Xs, Y, Ys, P, Ps = train_test(X, Y, P)
     Pe = estimate(X, Y, Xs)
     acc, frac_green = rank_eval(Pe, Xs, Ys, Ps)
+    sample_acc, sample_frac_green = sample_eval(Pe, Xs, Ys, Ps)
+
+    print("rank acc: {} sample acc: {}".format(acc, sample_acc))
+    print("rank frac: {} sample frac: {}".format(frac_green, sample_frac_green))
 
     n_green = np.sum(Xs[:, 1])
     n_green_guilty = np.sum(Ys[(Xs[:, 1]).astype(bool)])
-    total_frac_green = n_green_guilty / n_green
-    return acc, frac_green, total_frac_green
+    n_guilty = np.sum(Ys)
+    total_frac_green = n_green_guilty / n_guilty
+    return acc, frac_green, sample_acc, sample_frac_green, total_frac_green
 
 
-baserates, acc_vector, bias_vector, tot_vec = baserate_selection_plot()
+baserates, acc_vector, bias_vector, sacc_vector, sbias_vector, tot_vec = baserate_selection_plot()
 pl.figure()
-pl.plot(baserates, bias_vector, 'r-')
-pl.plot(baserates, tot_vec, 'k-')
+pl.plot(tot_vec, bias_vector, 'r-', label="Rank Bias")
+pl.plot(tot_vec, sbias_vector, 'g-', label="Sample Bias")
+pl.plot(tot_vec, tot_vec, 'k-', label="Total Proportion")
+pl.legend()
+pl.figure()
+pl.plot(tot_vec, acc_vector, 'r-', label="Rank Acc")
+pl.plot(tot_vec, sacc_vector, 'g-', label="Sampling Acc")
+pl.legend()
 pl.show()
